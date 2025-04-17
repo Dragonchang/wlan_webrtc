@@ -8,7 +8,7 @@ import java.util.Locale;
 public class Logger {
 
     private static final String FORMAT_STRING = "(%1$s.%2$s %3$dL)";
-    private static final String TAG = "zhf_webrtc";
+    private static final String TAG = "zfl_webrtc";
     private static volatile Logger instance;
     public static final int DEBUG = 0;
     public static final int RELEASE = 1;

@@ -28,8 +28,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Wlan_webrtc_client"
         tools:targetApi="31">
-        <activity android:name=".ChatSingleActivity">
-
+        <activity android:name=".ChatSingleActivity"
+            android:launchMode="singleTask">
         </activity>
         <activity
             android:name=".MainActivity"

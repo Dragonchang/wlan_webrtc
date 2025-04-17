@@ -8,6 +8,7 @@ public enum MessageType {
     OFFER("offer"),
     ANSWER("answer"),
     ICE_CANDIDATE("candidate"),
+    HANGUP("hangup"),
     UN_KNOWN("unknown");
 
     private String id;

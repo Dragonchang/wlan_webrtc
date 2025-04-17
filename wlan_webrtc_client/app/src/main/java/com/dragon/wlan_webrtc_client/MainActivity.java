@@ -2,6 +2,8 @@ package com.dragon.wlan_webrtc_client;
 
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Button;
+import android.widget.QuickContactBadge;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -13,12 +15,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 public class MainActivity extends AppCompatActivity {
-    /**
-     * ---------和信令服务相关-----------
-     */
-    private final String address = "ws://192.168.115.120";
-
-    private final int port = 8887;
 
     private SignalClient mClient;
 
@@ -30,6 +26,11 @@ public class MainActivity extends AppCompatActivity {
         /** ---------开始连接信令服务----------- */
         mClient = SignalClient.INSTANCE(this);
         mClient.connect();
+        Button button = findViewById(R.id.button);
+        button.setOnClickListener(v -> {
+            Log.d("MainActivity","呼叫老师");
+            ChatSingleActivity.openActivity(this, true, SignalClient.clentID, "laoshi", null);
+        });
     }
 
 

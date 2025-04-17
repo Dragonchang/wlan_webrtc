@@ -11,7 +11,6 @@ import android.widget.ListView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.json.JSONObject;
-import org.webrtc.PeerConnectionFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,7 +49,7 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
                 // 获取点击的 item 的数据
                 String client = (String) parent.getItemAtPosition(position);
                 Log.d("MainActivity", "=== onItemClick client: "+client);
-                ChatSingleActivity.openActivity(MainActivity.this, true, "master", client);
+                ChatSingleActivity.openActivity(MainActivity.this, true, "master", client, null);
             }
         });
         Log.d("MainActivity", "=== onCreate*********************11111111");
@@ -60,10 +59,10 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        SignalServer.INSTANCE().unRegisterImsConnectCallBack(this);
+        SignalServer.INSTANCE(this).unRegisterImsConnectCallBack(this);
         try {
             Log.d("MainActivity", "=== onDestroy*********************");
-            SignalServer.INSTANCE().stop();
+            SignalServer.INSTANCE(this).stop();
         } catch (IOException e) {
             throw new RuntimeException(e);
         } catch (InterruptedException e) {
@@ -74,14 +73,14 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
      * 启动信令服务
      */
     private void startImsServices() {
-        SignalServer.INSTANCE().registerImsCallback(this);
-        SignalServer.INSTANCE().start();
+        SignalServer.INSTANCE(this).registerImsCallback(this);
+        SignalServer.INSTANCE(this).start();
     }
 
     @Override
     public void refeshClent() {
         Log.d("MainActivity", "=== refeshClent");
-        List<String> clients = SignalServer.INSTANCE().getClientList();
+        List<String> clients = SignalServer.INSTANCE(this).getClientList();
         dataList.clear();
         dataList.addAll(clients);
         runOnUiThread(new Runnable() {
@@ -99,6 +98,11 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
 
     @Override
     public void onRemoteCandidateReceived(JSONObject message) {
+
+    }
+
+    @Override
+    public void onHangup() {
 
     }
 }

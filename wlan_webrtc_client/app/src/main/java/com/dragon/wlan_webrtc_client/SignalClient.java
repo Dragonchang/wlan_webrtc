@@ -15,13 +15,16 @@ import java.util.List;
 
 public class SignalClient extends WebSocketClient {
 
-    private Context mContext;
+    public static String clentID = "111";
     /**
      * ---------和信令服务相关-----------
      */
     private static String address = "ws://192.168.115.120";
 
     private static int port = 8887;
+
+
+    private Context mContext;
 
     //ims回调
     private List<ImsCallBack> mImsCallback = new ArrayList<>();
@@ -63,7 +66,7 @@ public class SignalClient extends WebSocketClient {
      */
     public void unRegisterImsConnectCallBack(ImsCallBack imsCallback) {
         synchronized (mImsCallback) {
-            if(!mImsCallback.contains(imsCallback)) {
+            if(mImsCallback.contains(imsCallback)) {
                 mImsCallback.remove(imsCallback);
             }
         }
@@ -76,7 +79,7 @@ public class SignalClient extends WebSocketClient {
         JSONObject message = new JSONObject();
         try {
             message.put("type", MessageType.REGISTER.getId());
-            message.put("id", "1111");
+            message.put("id", clentID);
             this.send(message.toString());
         } catch (JSONException e) {
             e.printStackTrace();
@@ -92,11 +95,13 @@ public class SignalClient extends WebSocketClient {
             String type = jsonMessage.getString("type");
             if (type.equals(MessageType.OFFER.getId())) {
                 onRemoteOfferReceived(jsonMessage);
-            } else if (type.equals("answer")) {
-                //onRemoteAnswerReceived(jsonMessage);
+            } else if (type.equals(MessageType.ANSWER.getId())) {
+                onRemoteAnswerReceived(jsonMessage);
             } else if (type.equals(MessageType.ICE_CANDIDATE.getId())) {
                 onRemoteCandidateReceived(jsonMessage);
-            } else {
+            } else if (type.equals(MessageType.HANGUP.getId())) {
+                onHangup();
+            }  else {
                 Logger.e("the type is invalid: " + type);
             }
         } catch (JSONException e) {
@@ -127,6 +132,13 @@ public class SignalClient extends WebSocketClient {
             Logger.d("=== SignalClient onRemoteOfferReceived() e=" + e.getMessage());
         }
     }
+    private void onRemoteAnswerReceived(JSONObject message) {
+        synchronized (mImsCallback) {
+            for(ImsCallBack callBack : mImsCallback) {
+                callBack.onRemoteAnswerReceived(message);
+            }
+        }
+    }
 
     private void onRemoteCandidateReceived(JSONObject message) {
         synchronized (mImsCallback) {
@@ -135,4 +147,13 @@ public class SignalClient extends WebSocketClient {
             }
         }
     }
+
+    private void onHangup() {
+        synchronized (mImsCallback) {
+            for(ImsCallBack callBack : mImsCallback) {
+                callBack.onHangup();
+            }
+        }
+    }
+
 }

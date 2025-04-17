@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -50,11 +51,6 @@ import java.util.List;
 public class ChatSingleActivity extends AppCompatActivity implements ImsCallback{
 
     /**
-     * ---------和信令服务相关-----------
-     */
-    private final int port = 8887;
-
-    /**
      * ---------和webrtc相关-----------
      */
     // 视频信息
@@ -73,6 +69,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
     private SurfaceViewRenderer mLocalSurfaceView;
     private SurfaceViewRenderer mRemoteSurfaceView;
 
+    private ImageView mHangupButton;
     // 音视频数据
     public static final String VIDEO_TRACK_ID = "1";//"ARDAMSv0";
     public static final String AUDIO_TRACK_ID = "2";//"ARDAMSa0";
@@ -92,6 +89,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
     public String mCallFrom;
     //被呼叫的用户
     private String mCallTo;
+    private String mSdpInfo;
 
     private WebSocket mCallFromConnect;
 
@@ -100,13 +98,15 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
     //是否处于通话状态
     private boolean isInCalling = false;
 
+
     public static void openActivity(Context context, boolean isOutgoing,
-                                    String callFrom, String callTo) {
+                                    String callFrom, String callTo, String sdpInfo) {
         Intent intent = new Intent(context, ChatSingleActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra("isOutgoing", isOutgoing);
         intent.putExtra("callFrom", callFrom);
         intent.putExtra("callTo", callTo);
+        intent.putExtra("sdpInfo", sdpInfo);
         context.startActivity(intent);
     }
 
@@ -114,13 +114,24 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat_single);
+
+        SignalServer.INSTANCE(this).registerImsCallback(this);
+
         Intent intent = getIntent();
         mIsOutgoing = intent.getBooleanExtra("isOutgoing", false);
         mCallFrom = intent.getStringExtra("callFrom");
         mCallTo = intent.getStringExtra("callTo");
+        mSdpInfo = intent.getStringExtra("sdpInfo");
+
         // 用户打印信息
         mLogcatView = findViewById(R.id.LogcatView);
-
+        mHangupButton = findViewById(R.id.hangupImageView);
+        mHangupButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hangUp();
+            }
+        });
         mRootEglBase = EglBase.create();
 
         // 用于展示本地和远端视频
@@ -161,11 +172,13 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         mAudioTrack = mPeerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource);
         mAudioTrack.setEnabled(true);
         if(mIsOutgoing) {
-            mCallToConnect = SignalServer.INSTANCE().getClientById(mCallTo);
+            mCallToConnect = SignalServer.INSTANCE(this).getClientById(mCallTo);
             doStartCall(mCallToConnect);
         } else {
-            mCallFromConnect= SignalServer.INSTANCE().getClientById(mCallFrom);
+            mCallFromConnect= SignalServer.INSTANCE(this).getClientById(mCallFrom);
+            onRemoteOfferReceived(mSdpInfo);
         }
+        isInCalling = true;
     }
 
     @Override
@@ -190,6 +203,10 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if(isInCalling) {
+            isInCalling = false;
+            hangUp();
+        }
         doLeave();
         mLocalSurfaceView.release();
         mRemoteSurfaceView.release();
@@ -200,6 +217,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         PeerConnectionFactory.stopInternalTracingCapture();
         PeerConnectionFactory.shutdownInternalTracer();
         mPeerConnectionFactory.dispose();
+        SignalServer.INSTANCE(this).unRegisterImsConnectCallBack(this);
     }
 
     @Override
@@ -250,6 +268,11 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         if (mPeerConnection == null) {
             mPeerConnection = createPeerConnection();
         }
+        if(mPeerConnection == null) {
+            Logger.e("Create mPeerConnection failed");
+            finish();
+            return;
+        }
         MediaConstraints mediaConstraints = new MediaConstraints();
         mediaConstraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true")); // 接收远端音频
         mediaConstraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true")); // 接收远端视频
@@ -289,7 +312,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
 
                 JSONObject message = new JSONObject();
                 try {
-                    message.put("type", "answer");
+                    message.put("type", MessageType.ANSWER.getId());
                     message.put("sdp", sessionDescription.description);
                     sendMessage(message.toString());
                 } catch (JSONException e) {
@@ -500,43 +523,44 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
 
     private void sendMessage(JSONObject message) {
         if(mIsOutgoing) {
-            SignalServer.INSTANCE().sendMessage(mCallTo, message.toString());
+            SignalServer.INSTANCE(this).sendMessage(mCallTo, message.toString());
         } else {
-            SignalServer.INSTANCE().sendMessage(mCallFrom, message.toString());
+            SignalServer.INSTANCE(this).sendMessage(mCallFrom, message.toString());
         }
     }
 
     private void sendMessage(String message) {
         if(mIsOutgoing) {
-            SignalServer.INSTANCE().sendMessage(mCallTo, message);
+            SignalServer.INSTANCE(this).sendMessage(mCallTo, message);
         } else {
-            SignalServer.INSTANCE().sendMessage(mCallFrom, message);
+            SignalServer.INSTANCE(this).sendMessage(mCallFrom, message);
         }
     }
 
-    // 接听方，收到offer
-    private void onRemoteOfferReceived(JSONObject message) {
+    /**
+     * 接收到学生的视频通话请求
+     * @param description
+     */
+    public void onRemoteOfferReceived(String description) {
         printInfoOnScreen("Receive Remote Call ...");
 
         if (mPeerConnection == null) {
             mPeerConnection = createPeerConnection();
         }
-
-        try {
-            String description = message.getString("sdp");
-            mPeerConnection.setRemoteDescription(
-                    new SimpleSdpObserver(),
-                    new SessionDescription(
-                            SessionDescription.Type.OFFER,
-                            description));
-            printInfoOnScreen("收到offer...调用doAnswerCall");
-            doAnswerCall();
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+        mPeerConnection.setRemoteDescription(
+                new SimpleSdpObserver(),
+                new SessionDescription(
+                        SessionDescription.Type.OFFER,
+                        description));
+        printInfoOnScreen("收到offer...调用doAnswerCall");
+        doAnswerCall();
     }
 
-    // 发送方，收到answer
+    /**
+     * 接收到学生的answer
+     * @param message
+     */
+    @Override
     public void onRemoteAnswerReceived(JSONObject message) {
         printInfoOnScreen("Receive Remote Answer ...");
         try {
@@ -553,7 +577,11 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         updateCallState(false);
     }
 
-    // 收到对端发过来的candidate
+    /**
+     * 收到学生端发过来的candidate
+     * @param message
+     */
+    @Override
     public void onRemoteCandidateReceived(JSONObject message) {
         printInfoOnScreen("Receive Remote Candidate ...");
         try {
@@ -573,6 +601,12 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         }
     }
 
+    @Override
+    public void onHangup() {
+        printInfoOnScreen("onHangup ...");
+        finish();
+    }
+
     private void onRemoteHangup() {
         printInfoOnScreen("Receive Remote Hangup Event ...");
         doLeave();
@@ -587,5 +621,17 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
                 mLogcatView.setText(output);
             }
         });
+    }
+
+    private void hangUp() {
+        JSONObject message = new JSONObject();
+        try {
+            message.put("type", MessageType.HANGUP.getId());
+            sendMessage(message.toString());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        isInCalling = false;
+        finish();
     }
 }

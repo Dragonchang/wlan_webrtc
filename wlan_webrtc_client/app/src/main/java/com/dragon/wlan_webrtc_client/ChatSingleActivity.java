@@ -5,15 +5,11 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import org.java_websocket.WebSocket;
-import org.java_websocket.client.WebSocketClient;
-import org.java_websocket.handshake.ClientHandshake;
-import org.java_websocket.handshake.ServerHandshake;
-import org.java_websocket.server.WebSocketServer;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.webrtc.AudioSource;
@@ -44,9 +40,6 @@ import org.webrtc.VideoEncoderFactory;
 import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 
-import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -84,6 +77,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
     private SurfaceViewRenderer mLocalSurfaceView;
     private SurfaceViewRenderer mRemoteSurfaceView;
 
+    private ImageView mHangupButton;
     // 音视频数据
     public static final String VIDEO_TRACK_ID = "1";//"ARDAMSv0";
     public static final String AUDIO_TRACK_ID = "2";//"ARDAMSa0";
@@ -96,6 +90,9 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
     //用于数据传输
     private PeerConnection mPeerConnection;
     private PeerConnectionFactory mPeerConnectionFactory;
+
+    //是否处于通话状态
+    private boolean isInCalling = false;
 
     public static void openActivity(Context context, boolean isOutgoing,
                                     String callFrom, String callTo, String mSdpInfo) {
@@ -121,7 +118,13 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         mSdpInfo = intent.getStringExtra("mSdpInfo");
         // 用户打印信息
         mLogcatView = findViewById(R.id.LogcatView);
-
+        mHangupButton = findViewById(R.id.hangupImageView);
+        mHangupButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hangUp();
+            }
+        });
         mRootEglBase = EglBase.create();
 
         // 用于展示本地和远端视频
@@ -166,8 +169,9 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
             //被动接收到老师的通话请求
             onRemoteOfferReceived(mSdpInfo);
         } else {
-
+            doStartCall();
         }
+        isInCalling = true;
     }
 
     @Override
@@ -192,6 +196,10 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if(isInCalling) {
+            isInCalling = false;
+            hangUp();
+        }
         doLeave();
         mLocalSurfaceView.release();
         mRemoteSurfaceView.release();
@@ -202,6 +210,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         PeerConnectionFactory.stopInternalTracingCapture();
         PeerConnectionFactory.shutdownInternalTracer();
         mPeerConnectionFactory.dispose();
+        SignalClient.INSTANCE(this).unRegisterImsConnectCallBack(this);
     }
 
     public static class SimpleSdpObserver implements SdpObserver {
@@ -497,8 +506,39 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         doAnswerCall();
     }
 
+    /**
+     * 呼叫老师
+     */
+    public void doStartCall() {
+        printInfoOnScreen("Start Call, Wait ...");
+        if (mPeerConnection == null) {
+            mPeerConnection = createPeerConnection();
+        }
+        MediaConstraints mediaConstraints = new MediaConstraints();
+        mediaConstraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true")); // 接收远端音频
+        mediaConstraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true")); // 接收远端视频
+        mediaConstraints.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
+        mPeerConnection.createOffer(new SimpleSdpObserver() {
+            @Override
+            public void onCreateSuccess(SessionDescription sessionDescription) {
+                Logger.d("Create local offer success: \n" + sessionDescription.description);
+                mPeerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
+                JSONObject message = new JSONObject();
+                try {
+                    message.put("type", MessageType.OFFER.getId());
+                    message.put("sdp", sessionDescription.description);
+                    message.put("id", mCallFrom);
+                    sendMessage(message.toString());
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        }, mediaConstraints);
+    }
+
     // 发送方，收到answer
-    private void onRemoteAnswerReceived(JSONObject message) {
+    @Override
+    public void onRemoteAnswerReceived(JSONObject message) {
         printInfoOnScreen("Receive Remote Answer ...");
         try {
             String description = message.getString("sdp");
@@ -514,7 +554,14 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         updateCallState(false);
     }
 
+    @Override
+    public void onHangup() {
+        printInfoOnScreen("onHangup ...");
+        finish();
+    }
+
     // 收到对端发过来的candidate
+    @Override
     public void onRemoteCandidateReceived(JSONObject message) {
         printInfoOnScreen("Receive Remote Candidate ...");
         try {
@@ -534,11 +581,6 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         }
     }
 
-    private void onRemoteHangup() {
-        printInfoOnScreen("Receive Remote Hangup Event ...");
-        doLeave();
-    }
-
     private void printInfoOnScreen(String msg) {
         Logger.d(msg);
         runOnUiThread(new Runnable() {
@@ -548,5 +590,17 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
                 mLogcatView.setText(output);
             }
         });
+    }
+
+    private void hangUp() {
+        JSONObject message = new JSONObject();
+        try {
+            message.put("type", MessageType.HANGUP.getId());
+            sendMessage(message.toString());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        isInCalling = false;
+        finish();
     }
 }

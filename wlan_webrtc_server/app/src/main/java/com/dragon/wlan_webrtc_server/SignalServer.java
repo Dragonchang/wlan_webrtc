@@ -1,5 +1,6 @@
 package com.dragon.wlan_webrtc_server;
 
+import android.content.Context;
 import android.util.Log;
 
 import org.java_websocket.WebSocket;
@@ -7,7 +8,6 @@ import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.webrtc.SessionDescription;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -18,13 +18,15 @@ import java.util.Map;
 
 public class SignalServer extends WebSocketServer {
 
+    private Context mContext;
+
     public static volatile SignalServer INSTANCE;
 
-    public static SignalServer INSTANCE() {
+    public static SignalServer INSTANCE(Context context) {
         if (INSTANCE == null) {
             synchronized (SignalServer.class) {
                 if (INSTANCE == null) {
-                    INSTANCE = new SignalServer();
+                    INSTANCE = new SignalServer(context);
                 }
             }
         }
@@ -37,8 +39,9 @@ public class SignalServer extends WebSocketServer {
     //ims回调
     private List<ImsCallback> mImsCallback = new ArrayList<>();
 
-    private SignalServer() {
+    private SignalServer(Context context) {
         super(new InetSocketAddress(8887));
+        mContext = context;
 
     }
 
@@ -56,7 +59,7 @@ public class SignalServer extends WebSocketServer {
      */
     public void unRegisterImsConnectCallBack(ImsCallback imsCallback) {
         synchronized (mImsCallback) {
-            if(!mImsCallback.contains(imsCallback)) {
+            if(mImsCallback.contains(imsCallback)) {
                 mImsCallback.remove(imsCallback);
             }
         }
@@ -82,12 +85,14 @@ public class SignalServer extends WebSocketServer {
             String type = jsonMessage.getString("type");
             if (type.equals(MessageType.REGISTER.getId())) {
                 registerUser(conn, message);
-            }else if (type.equals("offer")) {
-                //onRemoteOfferReceived(jsonMessage);
-            }else if(type.equals("answer")) {
+            }else if (type.equals(MessageType.OFFER.getId())) {
+                onRemoteOfferReceived(jsonMessage);
+            }else if(type.equals(MessageType.ANSWER.getId())) {
                 onRemoteAnswerReceived(jsonMessage);
             }else if(type.equals(MessageType.ICE_CANDIDATE.getId())) {
                 onRemoteCandidateReceived(jsonMessage);
+            }else if(type.equals(MessageType.HANGUP.getId())) {
+                onHangup();
             }else{
                 Log.w("SignalServer", "the type is invalid: " + type);
             }
@@ -153,10 +158,28 @@ public class SignalServer extends WebSocketServer {
         }
     }
 
-    void onRemoteCandidateReceived(JSONObject message){
+    private void onRemoteCandidateReceived(JSONObject message){
         synchronized (mImsCallback) {
             for(ImsCallback callBack : mImsCallback) {
                 callBack.onRemoteCandidateReceived(message);
+            }
+        }
+    }
+
+    private void onRemoteOfferReceived(JSONObject message) {
+        try {
+            String description = message.getString("sdp");
+            String callFrom = message.getString("id");
+            ChatSingleActivity.openActivity(mContext, false, callFrom, "laoshi", description);
+        } catch (JSONException e) {
+            Logger.d("=== SignalClient onRemoteOfferReceived() e=" + e.getMessage());
+        }
+    }
+
+    private void onHangup() {
+        synchronized (mImsCallback) {
+            for(ImsCallback callBack : mImsCallback) {
+                callBack.onHangup();
             }
         }
     }
