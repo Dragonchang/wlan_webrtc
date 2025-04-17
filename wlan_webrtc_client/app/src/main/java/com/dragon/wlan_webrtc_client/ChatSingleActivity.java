@@ -110,7 +110,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat_single);
 
-        SignalClient.INSTANCE(this).registerImsCallback(this);
+        SignalClientManager.INSTANCE(this).registerImsCallback(this);
         Intent intent = getIntent();
         mIsOutgoing = intent.getBooleanExtra("isOutgoing", false);
         mCallFrom = intent.getStringExtra("callFrom");
@@ -210,7 +210,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         PeerConnectionFactory.stopInternalTracingCapture();
         PeerConnectionFactory.shutdownInternalTracer();
         mPeerConnectionFactory.dispose();
-        SignalClient.INSTANCE(this).unRegisterImsConnectCallBack(this);
+        SignalClientManager.INSTANCE(this).unRegisterImsConnectCallBack(this);
     }
 
     public static class SimpleSdpObserver implements SdpObserver {
@@ -480,11 +480,11 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
     };
 
     private void sendMessage(JSONObject message) {
-        SignalClient.INSTANCE(this).send(message.toString());
+        SignalClientManager.INSTANCE(this).send(message.toString());
     }
 
     private void sendMessage(String message) {
-        SignalClient.INSTANCE(this).send(message);
+        SignalClientManager.INSTANCE(this).send(message);
     }
 
     //学生接听方，收到offer

@@ -16,7 +16,7 @@ import java.net.URISyntaxException;
 
 public class MainActivity extends AppCompatActivity {
 
-    private SignalClient mClient;
+    private SignalClientManager mClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -24,12 +24,12 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Log.d("MainActivity","onCreate");
         /** ---------开始连接信令服务----------- */
-        mClient = SignalClient.INSTANCE(this);
+        mClient = SignalClientManager.INSTANCE(this);
         mClient.connect();
         Button button = findViewById(R.id.button);
         button.setOnClickListener(v -> {
             Log.d("MainActivity","呼叫老师");
-            ChatSingleActivity.openActivity(this, true, SignalClient.clentID, "laoshi", null);
+            ChatSingleActivity.openActivity(this, true, SignalClientManager.clentID, "laoshi", null);
         });
     }
 

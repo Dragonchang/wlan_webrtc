@@ -73,7 +73,7 @@ public class SignalServer extends WebSocketServer {
 
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        Log.d("SignalServer", "=== SignalServer onClose()");
+        Log.d("SignalServer", "=== SignalServer onClose()" + " code: "+ code+ " reason: " + reason+ " remote: " + remote);
         unregister(conn);
     }
 
