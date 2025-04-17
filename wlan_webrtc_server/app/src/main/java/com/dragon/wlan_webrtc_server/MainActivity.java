@@ -61,13 +61,14 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
         super.onDestroy();
         SignalServer.INSTANCE(this).unRegisterImsConnectCallBack(this);
         try {
-            Log.d("MainActivity", "=== onDestroy*********************");
+            Log.d("MainActivity", "=== onDestroy*********************SignalServer stop" + this);
             SignalServer.INSTANCE(this).stop();
         } catch (IOException e) {
             throw new RuntimeException(e);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+        System.exit(0);
     }
     /**
      * 启动信令服务
@@ -75,6 +76,7 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
     private void startImsServices() {
         SignalServer.INSTANCE(this).registerImsCallback(this);
         SignalServer.INSTANCE(this).start();
+        Log.d("MainActivity", "=== startImsServices*********************SignalServer start" + this);
     }
 
     @Override

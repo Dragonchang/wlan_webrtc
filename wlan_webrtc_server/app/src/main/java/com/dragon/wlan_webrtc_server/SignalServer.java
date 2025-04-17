@@ -9,6 +9,7 @@ import org.java_websocket.server.WebSocketServer;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -109,9 +110,23 @@ public class SignalServer extends WebSocketServer {
 
     @Override
     public void onStart() {
-
+        Log.d("SignalServer", "=== SignalServer onStart()");
     }
+    @Override
+    public void stop() throws IOException, InterruptedException {
+        Log.d("SignalServer", "=== stop*************************" + this);
 
+        for (Map.Entry<WebSocket, String> entry : mConnectMaps.entrySet()) {
+            WebSocket conn = entry.getKey();
+            conn.close();
+        }
+        super.stop();
+    }
+    @Override
+    public void start() {
+        Log.d("SignalServer", "=== start*************************"+ this);
+        super.start();
+    }
     /**
      * 获取所有当前连接的客户端列表
      * ip

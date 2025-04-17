@@ -23,7 +23,6 @@ public class SignalClient extends WebSocketClient {
 
     private static int port = 8887;
 
-
     private Context mContext;
 
     //ims回调
@@ -47,7 +46,7 @@ public class SignalClient extends WebSocketClient {
         return INSTANCE;
     }
 
-    private SignalClient(Context context, URI uri) {
+    public SignalClient(Context context, URI uri) {
         super(uri);
         mContext = context;
     }
