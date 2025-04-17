@@ -1,6 +1,7 @@
 package com.dragon.wlan_webrtc_server;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
@@ -8,10 +9,6 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.java_websocket.WebSocket;
-import org.java_websocket.client.WebSocketClient;
-import org.java_websocket.handshake.ClientHandshake;
-import org.java_websocket.handshake.ServerHandshake;
-import org.java_websocket.server.WebSocketServer;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.webrtc.AudioSource;
@@ -42,10 +39,6 @@ import org.webrtc.VideoEncoderFactory;
 import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -54,14 +47,12 @@ import java.util.List;
  *
  *
  */
-public class ChatSingleActivity extends AppCompatActivity {
+public class ChatSingleActivity extends AppCompatActivity implements ImsCallback{
 
     /**
      * ---------和信令服务相关-----------
      */
     private final int port = 8887;
-
-    private SignalServer mServer;
 
     /**
      * ---------和webrtc相关-----------
@@ -95,11 +86,38 @@ public class ChatSingleActivity extends AppCompatActivity {
     private PeerConnection mPeerConnection;
     private PeerConnectionFactory mPeerConnectionFactory;
 
+    //判断是否拨出通话
+    private boolean mIsOutgoing = false;
+    //拨打通话对象和来电的对象
+    public String mCallFrom;
+    //被呼叫的用户
+    private String mCallTo;
+
+    private WebSocket mCallFromConnect;
+
+    private WebSocket mCallToConnect;
+
+    //是否处于通话状态
+    private boolean isInCalling = false;
+
+    public static void openActivity(Context context, boolean isOutgoing,
+                                    String callFrom, String callTo) {
+        Intent intent = new Intent(context, ChatSingleActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra("isOutgoing", isOutgoing);
+        intent.putExtra("callFrom", callFrom);
+        intent.putExtra("callTo", callTo);
+        context.startActivity(intent);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat_single);
-
+        Intent intent = getIntent();
+        mIsOutgoing = intent.getBooleanExtra("isOutgoing", false);
+        mCallFrom = intent.getStringExtra("callFrom");
+        mCallTo = intent.getStringExtra("callTo");
         // 用户打印信息
         mLogcatView = findViewById(R.id.LogcatView);
 
@@ -142,10 +160,12 @@ public class ChatSingleActivity extends AppCompatActivity {
         AudioSource audioSource = mPeerConnectionFactory.createAudioSource(new MediaConstraints());
         mAudioTrack = mPeerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource);
         mAudioTrack.setEnabled(true);
-
-        /** ---------开始启动信令服务----------- */
-        mServer = new SignalServer(port);
-        mServer.start();
+        if(mIsOutgoing) {
+            mCallToConnect = SignalServer.INSTANCE().getClientById(mCallTo);
+            doStartCall(mCallToConnect);
+        } else {
+            mCallFromConnect= SignalServer.INSTANCE().getClientById(mCallFrom);
+        }
     }
 
     @Override
@@ -180,13 +200,11 @@ public class ChatSingleActivity extends AppCompatActivity {
         PeerConnectionFactory.stopInternalTracingCapture();
         PeerConnectionFactory.shutdownInternalTracer();
         mPeerConnectionFactory.dispose();
-        try {
-            mServer.stop();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+    }
+
+    @Override
+    public void refeshClent() {
+
     }
 
     public static class SimpleSdpObserver implements SdpObserver {
@@ -225,7 +243,7 @@ public class ChatSingleActivity extends AppCompatActivity {
     }
 
     /**
-     * 有其他用户连进来，
+     * 呼叫client用户
      */
     public void doStartCall(WebSocket conn) {
         printInfoOnScreen("Start Call, Wait ...");
@@ -243,7 +261,7 @@ public class ChatSingleActivity extends AppCompatActivity {
                 mPeerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
                 JSONObject message = new JSONObject();
                 try {
-                    message.put("type", "offer");
+                    message.put("type", MessageType.OFFER.getId());
                     message.put("sdp", sessionDescription.description);
                     conn.send(message.toString());
                 } catch (JSONException e) {
@@ -429,7 +447,7 @@ public class ChatSingleActivity extends AppCompatActivity {
             try {
                 JSONObject message = new JSONObject();
                 //message.put("userId", RTCWebRTCSignalClient.getInstance().getUserId());
-                message.put("type", "candidate");
+                message.put("type", MessageType.ICE_CANDIDATE.getId());
                 message.put("label", iceCandidate.sdpMLineIndex);
                 message.put("id", iceCandidate.sdpMid);
                 message.put("candidate", iceCandidate.sdp);
@@ -481,73 +499,18 @@ public class ChatSingleActivity extends AppCompatActivity {
     };
 
     private void sendMessage(JSONObject message) {
-        mServer.broadcast(message.toString());
-
+        if(mIsOutgoing) {
+            SignalServer.INSTANCE().sendMessage(mCallTo, message.toString());
+        } else {
+            SignalServer.INSTANCE().sendMessage(mCallFrom, message.toString());
+        }
     }
 
     private void sendMessage(String message) {
-        mServer.broadcast(message);
-    }
-
-    class SignalServer extends WebSocketServer {
-
-        public SignalServer(int port) {
-            super(new InetSocketAddress(port));
-        }
-
-        @Override
-        public void onOpen(WebSocket conn, ClientHandshake handshake) {
-            Logger.d("=== SignalServer onOpen()");
-            printInfoOnScreen("onOpen有客户端连接上...调用start call");
-            //调用call， 进行媒体协商
-            doStartCall(conn);
-        }
-
-        @Override
-        public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-            Logger.d("=== SignalServer onClose() reason=" + reason + ", remote=" + remote);
-            printInfoOnScreen("onClose客户端断开...调用doLeave，reason=" + reason);
-            doLeave();
-        }
-
-        @Override
-        public void onMessage(WebSocket conn, String message) {
-            Logger.d("=== SignalServer onMessage() message=" + message);
-            try {
-                JSONObject jsonMessage = new JSONObject(message);
-
-                String type = jsonMessage.getString("type");
-                if (type.equals("offer")) {
-                    onRemoteOfferReceived(jsonMessage);
-                } else if (type.equals("answer")) {
-                    onRemoteAnswerReceived(jsonMessage);
-                } else if (type.equals("candidate")) {
-                    onRemoteCandidateReceived(jsonMessage);
-                } else {
-                    Logger.e("the type is invalid: " + type);
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }
-
-        @Override
-        public void onError(WebSocket conn, Exception ex) {
-            ex.printStackTrace();
-            Logger.e("=== SignalServer onMessage() ex=" + ex.getMessage());
-        }
-
-        @Override
-        public void onStart() {
-            Logger.d("=== SignalServer onStart()");
-            setConnectionLostTimeout(0);
-            setConnectionLostTimeout(100);
-
-            printInfoOnScreen("onStart服务端建立成功...创建PC");
-            //这里应该创建PeerConnection
-            if (mPeerConnection == null) {
-                mPeerConnection = createPeerConnection();
-            }
+        if(mIsOutgoing) {
+            SignalServer.INSTANCE().sendMessage(mCallTo, message);
+        } else {
+            SignalServer.INSTANCE().sendMessage(mCallFrom, message);
         }
     }
 
@@ -574,7 +537,7 @@ public class ChatSingleActivity extends AppCompatActivity {
     }
 
     // 发送方，收到answer
-    private void onRemoteAnswerReceived(JSONObject message) {
+    public void onRemoteAnswerReceived(JSONObject message) {
         printInfoOnScreen("Receive Remote Answer ...");
         try {
             String description = message.getString("sdp");
@@ -591,7 +554,7 @@ public class ChatSingleActivity extends AppCompatActivity {
     }
 
     // 收到对端发过来的candidate
-    private void onRemoteCandidateReceived(JSONObject message) {
+    public void onRemoteCandidateReceived(JSONObject message) {
         printInfoOnScreen("Receive Remote Candidate ...");
         try {
             // candidate 候选者描述信息

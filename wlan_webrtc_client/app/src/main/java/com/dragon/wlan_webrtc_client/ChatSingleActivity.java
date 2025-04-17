@@ -1,7 +1,9 @@
 package com.dragon.wlan_webrtc_client;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 
@@ -53,16 +55,15 @@ import java.util.List;
  *
  *
  */
-public class ChatSingleActivity extends AppCompatActivity {
-
-    /**
-     * ---------和信令服务相关-----------
-     */
-    private final String address = "ws://192.168.115.120";
-
-    private final int port = 8887;
-
-    private SignalClient mClient;
+public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack{
+    //判断是否拨出通话
+    private boolean mIsOutgoing = false;
+    //拨打通话对象和来电的对象
+    public String mCallFrom;
+    //被呼叫的用户
+    private String mCallTo;
+    //off时候老师端的sdp信息
+    private String mSdpInfo;
 
     /**
      * ---------和webrtc相关-----------
@@ -96,11 +97,28 @@ public class ChatSingleActivity extends AppCompatActivity {
     private PeerConnection mPeerConnection;
     private PeerConnectionFactory mPeerConnectionFactory;
 
+    public static void openActivity(Context context, boolean isOutgoing,
+                                    String callFrom, String callTo, String mSdpInfo) {
+        Intent intent = new Intent(context, ChatSingleActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra("isOutgoing", isOutgoing);
+        intent.putExtra("callFrom", callFrom);
+        intent.putExtra("callTo", callTo);
+        intent.putExtra("mSdpInfo", mSdpInfo);
+        context.startActivity(intent);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat_single);
 
+        SignalClient.INSTANCE(this).registerImsCallback(this);
+        Intent intent = getIntent();
+        mIsOutgoing = intent.getBooleanExtra("isOutgoing", false);
+        mCallFrom = intent.getStringExtra("callFrom");
+        mCallTo = intent.getStringExtra("callTo");
+        mSdpInfo = intent.getStringExtra("mSdpInfo");
         // 用户打印信息
         mLogcatView = findViewById(R.id.LogcatView);
 
@@ -144,12 +162,11 @@ public class ChatSingleActivity extends AppCompatActivity {
         mAudioTrack = mPeerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource);
         mAudioTrack.setEnabled(true);
 
-        /** ---------开始启动信令服务----------- */
-        try {
-            mClient = new SignalClient(new URI(address + ":" + port));
-            mClient.connect();
-        } catch (URISyntaxException e) {
-            e.printStackTrace();
+        if(!mIsOutgoing) {
+            //被动接收到老师的通话请求
+            onRemoteOfferReceived(mSdpInfo);
+        } else {
+
         }
     }
 
@@ -223,6 +240,9 @@ public class ChatSingleActivity extends AppCompatActivity {
     }
 
 
+    /**
+     * 将学生端的sdp信息发送给老师端
+     */
     public void doAnswerCall() {
         printInfoOnScreen("Answer Call, Wait ...");
 
@@ -241,7 +261,7 @@ public class ChatSingleActivity extends AppCompatActivity {
 
                 JSONObject message = new JSONObject();
                 try {
-                    message.put("type", "answer");
+                    message.put("type", MessageType.ANSWER.getId());
                     message.put("sdp", sessionDescription.description);
                     sendMessage(message.toString());
                 } catch (JSONException e) {
@@ -399,7 +419,7 @@ public class ChatSingleActivity extends AppCompatActivity {
             try {
                 JSONObject message = new JSONObject();
                 //message.put("userId", RTCWebRTCSignalClient.getInstance().getUserId());
-                message.put("type", "candidate");
+                message.put("type", MessageType.ICE_CANDIDATE.getId());
                 message.put("label", iceCandidate.sdpMLineIndex);
                 message.put("id", iceCandidate.sdpMid);
                 message.put("candidate", iceCandidate.sdp);
@@ -451,84 +471,30 @@ public class ChatSingleActivity extends AppCompatActivity {
     };
 
     private void sendMessage(JSONObject message) {
-        mClient.send(message.toString());
+        SignalClient.INSTANCE(this).send(message.toString());
     }
 
     private void sendMessage(String message) {
-        mClient.send(message);
+        SignalClient.INSTANCE(this).send(message);
     }
 
-    class SignalClient extends WebSocketClient {
-
-        public SignalClient(URI serverUri) {
-            super(serverUri);
-        }
-
-        @Override
-        public void onOpen(ServerHandshake handshakedata) {
-            Logger.d("=== SignalClient onOpen()");
-            printInfoOnScreen("连接服务端成功...创建PC");
-            //这里应该创建PeerConnection
-            if (mPeerConnection == null) {
-                mPeerConnection = createPeerConnection();
-            }
-        }
-
-        @Override
-        public void onMessage(final String message) {
-            Logger.d("=== SignalClient onMessage(): message=" + message);
-            try {
-                JSONObject jsonMessage = new JSONObject(message);
-
-                String type = jsonMessage.getString("type");
-                if (type.equals("offer")) {
-                    onRemoteOfferReceived(jsonMessage);
-                } else if (type.equals("answer")) {
-                    onRemoteAnswerReceived(jsonMessage);
-                } else if (type.equals("candidate")) {
-                    onRemoteCandidateReceived(jsonMessage);
-                } else {
-                    Logger.e("the type is invalid: " + type);
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
-        }
-
-        @Override
-        public void onClose(int code, String reason, boolean remote) {
-            Logger.d("=== SignalClient onClose(): reason=" + reason + ", remote=" + remote);
-            printInfoOnScreen("和服务端断开...调用doLeave");
-            doLeave();
-        }
-
-        @Override
-        public void onError(Exception ex) {
-            ex.printStackTrace();
-            Logger.d("=== SignalClient onMessage() ex=" + ex.getMessage());
-        }
-    }
-
-    // 接听方，收到offer
-    private void onRemoteOfferReceived(JSONObject message) {
+    //学生接听方，收到offer
+    public void onRemoteOfferReceived(String description) {
         printInfoOnScreen("Receive Remote Call ...");
-
+        if(description == null) {
+            Log.e("ChatSingleActivity", "onRemoteOfferReceived description == null");
+            return;
+        }
         if (mPeerConnection == null) {
             mPeerConnection = createPeerConnection();
         }
-
-        try {
-            String description = message.getString("sdp");
-            mPeerConnection.setRemoteDescription(
-                    new SimpleSdpObserver(),
-                    new SessionDescription(
-                            SessionDescription.Type.OFFER,
-                            description));
-            printInfoOnScreen("收到offer...调用doAnswerCall");
-            doAnswerCall();
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
+        mPeerConnection.setRemoteDescription(
+                new SimpleSdpObserver(),
+                new SessionDescription(
+                        SessionDescription.Type.OFFER,
+                        description));
+        printInfoOnScreen("收到offer...调用doAnswerCall");
+        doAnswerCall();
     }
 
     // 发送方，收到answer
@@ -549,7 +515,7 @@ public class ChatSingleActivity extends AppCompatActivity {
     }
 
     // 收到对端发过来的candidate
-    private void onRemoteCandidateReceived(JSONObject message) {
+    public void onRemoteCandidateReceived(JSONObject message) {
         printInfoOnScreen("Receive Remote Candidate ...");
         try {
             // candidate 候选者描述信息

@@ -28,9 +28,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Wlan_webrtc_client"
         tools:targetApi="31">
+        <activity android:name=".ChatSingleActivity">
 
+        </activity>
         <activity
-            android:name=".ChatSingleActivity"
+            android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

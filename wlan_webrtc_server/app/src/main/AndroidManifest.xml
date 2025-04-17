@@ -28,15 +28,12 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Wlan_webrtc_server"
         tools:targetApi="31">
+        <activity android:name=".ChatSingleActivity">
 
-
-        <service
-            android:name=".SignalService"
-            android:enabled="true"
-            android:exported="true" />
-
+        </activity>
         <activity
-            android:name=".ChatSingleActivity"
+            android:name=".MainActivity"
+            android:launchMode="singleInstance"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
