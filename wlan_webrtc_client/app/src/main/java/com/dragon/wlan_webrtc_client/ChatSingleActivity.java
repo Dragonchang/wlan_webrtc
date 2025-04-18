@@ -122,7 +122,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         mHangupButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                hangUp();
+                hangUp("user cancel");
             }
         });
         mRootEglBase = EglBase.create();
@@ -198,7 +198,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         super.onDestroy();
         if(isInCalling) {
             isInCalling = false;
-            hangUp();
+            hangUp("abnormal quit");
         }
         doLeave();
         mLocalSurfaceView.release();
@@ -555,8 +555,8 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
     }
 
     @Override
-    public void onHangup() {
-        printInfoOnScreen("onHangup ...");
+    public void onHangup(String reason) {
+        printInfoOnScreen("onHangup ... reason： "+reason);
         finish();
     }
 
@@ -592,10 +592,11 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallBack
         });
     }
 
-    private void hangUp() {
+    private void hangUp(String reason) {
         JSONObject message = new JSONObject();
         try {
             message.put("type", MessageType.HANGUP.getId());
+            message.put("reason", reason);
             sendMessage(message.toString());
         } catch (JSONException e) {
             e.printStackTrace();

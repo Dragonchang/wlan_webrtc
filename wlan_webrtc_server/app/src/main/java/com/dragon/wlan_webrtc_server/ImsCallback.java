@@ -6,5 +6,5 @@ public interface ImsCallback {
     void refeshClent();
     void onRemoteAnswerReceived(JSONObject message);
     void onRemoteCandidateReceived(JSONObject message);
-    void onHangup();
+    void onHangup(String reason);
 }

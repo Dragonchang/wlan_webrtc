@@ -18,19 +18,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SignalClientManager implements ISignalCallBack{
-    private static final String TAG = "VideoManager";
+    private static final String TAG = "SignalClientManager";
 
     /**
      * ---------和信令服务相关-----------
      */
-    public static String clentID = "111";
+    public static String clentID = "学生1";
     private static String address = "ws://192.168.115.120";
     private static int port = 8887;
     private URI mSignalServer;
 
     private Context mContext;
     //ims回调
-    private List<ImsCallBack> mImsCallback = new ArrayList<>();
+    private final List<ImsCallBack> mImsCallback = new ArrayList<>();
 
     private SignalClient mSignalClient;
     private IMSRetryHandler imsRetryHandler;
@@ -88,7 +88,8 @@ public class SignalClientManager implements ISignalCallBack{
             } else if (type.equals(MessageType.ICE_CANDIDATE.getId())) {
                 onRemoteCandidateReceived(jsonMessage);
             } else if (type.equals(MessageType.HANGUP.getId())) {
-                onHangup();
+                String reason = jsonMessage.getString("reason");
+                onHangup(reason);
             }  else {
                 Logger.e("the type is invalid: " + type);
             }
@@ -191,10 +192,10 @@ public class SignalClientManager implements ISignalCallBack{
         }
     }
 
-    private void onHangup() {
+    private void onHangup(String reason) {
         synchronized (mImsCallback) {
             for(ImsCallBack callBack : mImsCallback) {
-                callBack.onHangup();
+                callBack.onHangup(reason);
             }
         }
     }
@@ -203,7 +204,7 @@ public class SignalClientManager implements ISignalCallBack{
      * ims 重连handler
      */
     class IMSRetryHandler extends Handler {
-        private SignalClientManager mSignalClientManager;
+        private final SignalClientManager mSignalClientManager;
         public IMSRetryHandler(Looper looper, SignalClientManager SignalClientManager) {
             super(looper);
             mSignalClientManager = SignalClientManager;

@@ -1,6 +1,10 @@
 package com.dragon.wlan_webrtc_server;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Message;
 import android.util.Log;
 
 import org.java_websocket.WebSocket;
@@ -10,6 +14,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,7 +23,7 @@ import java.util.Map;
 
 
 public class SignalServer extends WebSocketServer {
-
+    private static final String TAG = "SignalServer";
     private Context mContext;
 
     public static volatile SignalServer INSTANCE;
@@ -40,9 +45,15 @@ public class SignalServer extends WebSocketServer {
     //ims回调
     private List<ImsCallback> mImsCallback = new ArrayList<>();
 
+    private IMSRetryHandler imsRetryHandler;
     private SignalServer(Context context) {
         super(new InetSocketAddress(8887));
         mContext = context;
+        HandlerThread imsRetry = new HandlerThread("ims_retry");
+        imsRetry.start();
+        imsRetryHandler = new IMSRetryHandler(imsRetry.getLooper(), this);
+
+        //setReuseAddr(true);
 
     }
 
@@ -93,7 +104,8 @@ public class SignalServer extends WebSocketServer {
             }else if(type.equals(MessageType.ICE_CANDIDATE.getId())) {
                 onRemoteCandidateReceived(jsonMessage);
             }else if(type.equals(MessageType.HANGUP.getId())) {
-                onHangup();
+                String reason = jsonMessage.getString("reason");
+                onHangup(reason);
             }else{
                 Log.w("SignalServer", "the type is invalid: " + type);
             }
@@ -106,6 +118,20 @@ public class SignalServer extends WebSocketServer {
     public void onError(WebSocket conn, Exception ex) {
         Log.d("SignalServer", "=== SignalServer onError()");
         ex.printStackTrace();
+        if(ex instanceof BindException) {
+            Log.d("SignalServer", "bind port failed");
+            try {
+                stop();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+
+//            Message message = imsRetryHandler.obtainMessage();
+//            imsRetryHandler.sendMessageDelayed(message, 5000);
+
+        }
     }
 
     @Override
@@ -185,16 +211,31 @@ public class SignalServer extends WebSocketServer {
         try {
             String description = message.getString("sdp");
             String callFrom = message.getString("id");
+            if(ChatSingleActivity.isInCalling) {
+                Logger.w("=== SignalServer onRemoteOfferReceived 接收到"+callFrom+"打来的电话，老师正在通话中。。。。。。");
+                WebSocket connect = getClientById(callFrom);
+                if(connect != null) {
+                    JSONObject json_message = new JSONObject();
+                    try {
+                        json_message.put("type", MessageType.HANGUP.getId());
+                        json_message.put("reason", "incalling");
+                        connect.send(message.toString());
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+                return;
+            }
             ChatSingleActivity.openActivity(mContext, false, callFrom, "laoshi", description);
         } catch (JSONException e) {
-            Logger.d("=== SignalClient onRemoteOfferReceived() e=" + e.getMessage());
+            Logger.d("=== SignalServer onRemoteOfferReceived() e=" + e.getMessage());
         }
     }
 
-    private void onHangup() {
+    private void onHangup(String reason) {
         synchronized (mImsCallback) {
             for(ImsCallback callBack : mImsCallback) {
-                callBack.onHangup();
+                callBack.onHangup(reason);
             }
         }
     }
@@ -232,6 +273,23 @@ public class SignalServer extends WebSocketServer {
             for(ImsCallback callBack : mImsCallback) {
                 callBack.refeshClent();
             }
+        }
+    }
+
+    /**
+     * ims 重连handler
+     */
+    class IMSRetryHandler extends Handler {
+        SignalServer mSignalServer;
+        public IMSRetryHandler(Looper looper, SignalServer signalServer) {
+            super(looper);
+            mSignalServer = signalServer;
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            Log.w(TAG, "retry start ims server");
+            mSignalServer.start();
         }
     }
 }

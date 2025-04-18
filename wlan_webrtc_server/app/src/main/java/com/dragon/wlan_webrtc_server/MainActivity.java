@@ -104,7 +104,7 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
     }
 
     @Override
-    public void onHangup() {
+    public void onHangup(String reason) {
 
     }
 }
