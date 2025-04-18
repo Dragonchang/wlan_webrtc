@@ -115,7 +115,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat_single);
 
-        SignalServer.INSTANCE(this).registerImsCallback(this);
+        SignalServerManager.INSTANCE(this).registerImsCallback(this);
 
         Intent intent = getIntent();
         mIsOutgoing = intent.getBooleanExtra("isOutgoing", false);
@@ -172,10 +172,10 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         mAudioTrack = mPeerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource);
         mAudioTrack.setEnabled(true);
         if(mIsOutgoing) {
-            mCallToConnect = SignalServer.INSTANCE(this).getClientById(mCallTo);
+            mCallToConnect = SignalServerManager.INSTANCE(this).getClientById(mCallTo);
             doStartCall(mCallToConnect);
         } else {
-            mCallFromConnect= SignalServer.INSTANCE(this).getClientById(mCallFrom);
+            mCallFromConnect= SignalServerManager.INSTANCE(this).getClientById(mCallFrom);
             onRemoteOfferReceived(mSdpInfo);
         }
         isInCalling = true;
@@ -217,7 +217,7 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
         PeerConnectionFactory.stopInternalTracingCapture();
         PeerConnectionFactory.shutdownInternalTracer();
         mPeerConnectionFactory.dispose();
-        SignalServer.INSTANCE(this).unRegisterImsConnectCallBack(this);
+        SignalServerManager.INSTANCE(this).unRegisterImsConnectCallBack(this);
     }
 
     @Override
@@ -523,17 +523,17 @@ public class ChatSingleActivity extends AppCompatActivity implements ImsCallback
 
     private void sendMessage(JSONObject message) {
         if(mIsOutgoing) {
-            SignalServer.INSTANCE(this).sendMessage(mCallTo, message.toString());
+            SignalServerManager.INSTANCE(this).sendMessage(mCallTo, message.toString());
         } else {
-            SignalServer.INSTANCE(this).sendMessage(mCallFrom, message.toString());
+            SignalServerManager.INSTANCE(this).sendMessage(mCallFrom, message.toString());
         }
     }
 
     private void sendMessage(String message) {
         if(mIsOutgoing) {
-            SignalServer.INSTANCE(this).sendMessage(mCallTo, message);
+            SignalServerManager.INSTANCE(this).sendMessage(mCallTo, message);
         } else {
-            SignalServer.INSTANCE(this).sendMessage(mCallFrom, message);
+            SignalServerManager.INSTANCE(this).sendMessage(mCallFrom, message);
         }
     }
 

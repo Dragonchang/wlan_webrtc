@@ -59,30 +59,24 @@ public class MainActivity extends AppCompatActivity implements ImsCallback {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        SignalServer.INSTANCE(this).unRegisterImsConnectCallBack(this);
-        try {
-            Log.d("MainActivity", "=== onDestroy*********************SignalServer stop" + this);
-            SignalServer.INSTANCE(this).stop();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        SignalServerManager.INSTANCE(this).unRegisterImsConnectCallBack(this);
+        Log.d("MainActivity", "=== onDestroy*********************SignalServer stop" + this);
+        SignalServerManager.INSTANCE(this).stop();
         System.exit(0);
     }
     /**
      * 启动信令服务
      */
     private void startImsServices() {
-        SignalServer.INSTANCE(this).registerImsCallback(this);
-        SignalServer.INSTANCE(this).start();
+        SignalServerManager.INSTANCE(this).registerImsCallback(this);
+        SignalServerManager.INSTANCE(this).start();
         Log.d("MainActivity", "=== startImsServices*********************SignalServer start" + this);
     }
 
     @Override
     public void refeshClent() {
         Log.d("MainActivity", "=== refeshClent");
-        List<String> clients = SignalServer.INSTANCE(this).getClientList();
+        List<String> clients = SignalServerManager.INSTANCE(this).getClientList();
         dataList.clear();
         dataList.addAll(clients);
         runOnUiThread(new Runnable() {

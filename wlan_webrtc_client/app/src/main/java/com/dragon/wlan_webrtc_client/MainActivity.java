@@ -29,6 +29,9 @@ public class MainActivity extends AppCompatActivity {
         Button button = findViewById(R.id.button);
         button.setOnClickListener(v -> {
             Log.d("MainActivity","呼叫老师");
+            if(!mClient.isConnected) {
+                return;
+            }
             ChatSingleActivity.openActivity(this, true, SignalClientManager.clentID, "laoshi", null);
         });
     }

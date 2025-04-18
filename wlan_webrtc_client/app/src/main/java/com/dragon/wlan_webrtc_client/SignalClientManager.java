@@ -36,6 +36,8 @@ public class SignalClientManager implements ISignalCallBack{
     private IMSRetryHandler imsRetryHandler;
 
     public static volatile SignalClientManager INSTANCE;
+    public boolean isConnected = false;
+
     public static SignalClientManager INSTANCE(Context context) {
         if (INSTANCE == null) {
             synchronized (SignalClientManager.class) {
@@ -63,6 +65,7 @@ public class SignalClientManager implements ISignalCallBack{
     @Override
     public void onOpen(ServerHandshake handshakedata) {
         Log.d("SignalClientManager", "=== SignalClientManager onOpen()");
+        isConnected = true;
         //连接成功发送注册成功消息
         JSONObject message = new JSONObject();
         try {
@@ -101,6 +104,7 @@ public class SignalClientManager implements ISignalCallBack{
     @Override
     public void onClose(int code, String reason, boolean remote) {
         Logger.d("=== SignalClientManager onClose(): reason=" + reason + ", remote=" + remote);
+        isConnected = false;
         Message message = imsRetryHandler.obtainMessage();
         imsRetryHandler.sendMessageDelayed(message, 3000);
     }
@@ -108,6 +112,7 @@ public class SignalClientManager implements ISignalCallBack{
     @Override
     public void onError(Exception ex) {
         Logger.d("=== SignalClientManager onMessage() ex=" + ex.getMessage());
+        isConnected = false;
         ex.printStackTrace();
     }
 
